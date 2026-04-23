@@ -1,146 +1,130 @@
 #include <iostream>
-#include "funciones.h"
+#include <fstream>
+#include <string>
+#include <cstring>
+#include <stdexcept>
+#include <bitset>
+
 using namespace std;
 
+// Declaraciones de funciones externas
+string comprimirRLE(const string&);
+string descomprimirRLE(const string&);
+struct Nodo { int prefijo; char caracter; };
+void comprimirLZ78(const char*, Nodo*&, int&);
+char* descomprimirLZ78(Nodo*, int);
+void encriptar(unsigned char*, int, int, unsigned char);
+void desencriptar(unsigned char*, int, int, unsigned char);
+
 int main() {
-    int op;
+    // 1. Try-Catch: Entrada de datos
+    try {
+        string texto;
+        int tipoEntrada;
+        cout << "--- TIPO DE ENTRADA ---\n1. Archivo\n2. Manual\nSeleccione: ";
+        cin >> tipoEntrada; cin.ignore();
 
-    do {
-
-        cout << "1. Cambio dinero\n";
-        cout << "3. Comparar cadenas\n";
-        cout << "5. Entero a string\n";
-        cout << "7. Eliminar repetidos\n";
-        cout << "9. Sumar bloques\n";
-        cout << "11. Cine\n";
-        cout << "13. Estrellas\n";
-        cout << "15. Rectangulos\n";
-        cout << "17. Numeros amigables\n";
-        cout << "0. Salir\n";
-        cout << "Opcion: ";
-
-        cin >> op;
-        cin.ignore();
-        //me presentaba error y era por datos residuales en la memoria temporal de entrada y buacando como solucionar use  cin.ignore() para limpiar la entrada
-
-        switch (op) {
-
-        case 1: {
-            int x;
-            cout << "Cantidad: ";
-            cin >> x;
-            cambioDinero(x);
-            break;
+        if (tipoEntrada == 1) {
+            string nombreArchivo; cout << "Archivo: "; cin >> nombreArchivo;
+            ifstream archivo(nombreArchivo);
+            if (!archivo) throw runtime_error("Error abriendo archivo");
+            texto = string((istreambuf_iterator<char>(archivo)), istreambuf_iterator<char>());
+            archivo.close();
+        } else if (tipoEntrada == 2) {
+            cout << "Texto: "; getline(cin, texto);
+        } else {
+            throw invalid_argument("Opcion invalida");
         }
 
-        case 3: {
-            char a[100], b[100];
+        // 2. Try-Catch: Configuración
+        int opcion, n;
+        int claveTemp;
+        cout << "\n1. RLE, 2. LZ78, 3. Bits: "; cin >> opcion;
+        cout << "Rotacion (1-7): "; cin >> n;
+        cout << "Clave (0-255): "; cin >> claveTemp;
 
-            cout << "Cadena 1: ";
-            cin.getline(a, 100);
 
-            cout << "Cadena 2: ";
-            cin.getline(b, 100);
+        if (n <= 0 || n >= 8) throw invalid_argument("Rotacion invalida (debe ser 1-7)");
+        unsigned char clave = (unsigned char)claveTemp;
 
-            if (compararCadenas(a, b))
-                cout << "Iguales\n";
-            else
-                cout << "Diferentes\n";
-            break;
+        string resultadoFinal;
+
+        // 3. Try-Catch: Procesamiento
+        try {
+            if (opcion == 1) { // RLE
+                string comprimido = comprimirRLE(texto);
+                unsigned char* data = new unsigned char[comprimido.size()];
+                memcpy(data, comprimido.c_str(), comprimido.size());
+
+                cout << "\n--- ENCRIPTANDO (RLE) ---\n";
+                encriptar(data, comprimido.size(), n, clave);
+
+                cout << "Texto encriptado (bytes): " << string((char*)data, comprimido.size()) << endl;
+
+                cout << "\n--- DESENCRIPTANDO (RLE) ---\n";
+                desencriptar(data, comprimido.size(), n, clave);
+
+                string temp((char*)data, comprimido.size());
+                resultadoFinal = descomprimirRLE(temp);
+                delete[] data;
+            }
+            else if (opcion == 2) {
+                char textoC[100000]; strncpy(textoC, texto.c_str(), 99999);
+                Nodo* salida = nullptr; int tam = 0;
+                comprimirLZ78(textoC, salida, tam);
+
+                unsigned char* data = new unsigned char[tam * 2];
+                for (int i = 0; i < tam; i++) {
+                    data[i * 2] = (unsigned char)salida[i].prefijo;
+                    data[i * 2 + 1] = salida[i].caracter;
+                }
+
+                cout << "\n--- ENCRIPTANDO (LZ78) ---\n";
+                encriptar(data, tam * 2, n, clave);
+
+                cout << "Texto encriptado (bytes): ";
+                for(int i=0; i<tam*2; i++) cout << (char)data[i];
+                cout << endl;
+
+                cout << "\n--- DESENCRIPTANDO (LZ78) ---\n";
+                desencriptar(data, tam * 2, n, clave);
+
+                for (int i = 0; i < tam; i++) {
+                    salida[i].prefijo = data[i * 2];
+                    salida[i].caracter = data[i * 2 + 1];
+                }
+                char* descomp = descomprimirLZ78(salida, tam);
+                resultadoFinal = string(descomp);
+                delete[] data; delete[] salida; delete[] descomp;
+            }
+            else if (opcion == 3) {
+                int size = texto.size();
+                unsigned char* data = new unsigned char[size];
+                memcpy(data, texto.c_str(), size);
+
+                cout << "\n--- ENCRIPTANDO (BITS) ---\n";
+                encriptar(data, size, n, clave);
+                cout << "Texto encriptado: " << string((char*)data, size) << endl;
+
+                cout << "\n--- DESENCRIPTANDO (BITS) ---\n";
+                desencriptar(data, size, n, clave);
+                resultadoFinal = string((char*)data, size);
+                delete[] data;
+            }
+            else throw invalid_argument("Opcion de algoritmo invalida");
+        } catch (...) {
+            throw runtime_error("Fallo durante el procesamiento del algoritmo");
         }
 
-        case 5: {
-            int n;
-            char cad[100];
-
-            cout << "Ingrese numero: ";
-            cin >> n;
-            enteroAString(n, cad);
-
-            cout << "Resultado: " << cad << endl;
-            break;
+        // 4. Try-Catch: Verificación final
+        if (resultadoFinal != texto) {
+            throw runtime_error("Los datos no coinciden tras la descompresion");
         }
+        cout << "\n--- TODO CORRECTO ---\nResultado: " << resultadoFinal << endl;
 
-        case 7: {
-            char cad[100];
-
-            cout << "Ingrese cadena: ";
-            cin.getline(cad, 100);
-
-            eliminarRepetidos(cad);
-            cout << "Sin repetidos: " << cad << endl;
-            break;
-        }
-
-        case 9: {
-            char cad[100];
-            int n;
-
-            cout << "Cadena numerica: ";
-            cin.getline(cad, 100);
-
-            cout << "Tamano de bloque: ";
-            cin >> n;
-
-            cout << "Suma: " << sumarBloques(cad, n) << endl;
-            break;
-        }
-
-        case 11: {
-            cine();
-            break;
-        }
-
-        case 13: {
-            int mat[6][8] = {
-                {0,3,4,0,0,0,6,8},
-                {5,13,6,0,0,0,2,3},
-                {2,6,2,7,3,0,10,0},
-                {0,0,4,15,4,1,6,0},
-                {0,0,7,12,6,9,10,4},
-                {5,0,6,10,6,4,8,0}
-            };
-
-            cout << "Estrellas: "
-                 << contarEstrellas((int*)mat, 6, 8) << endl;
-            break;
-        }
-
-        case 15: {
-            int A[4], B[4], C[4];
-
-            cout << "Rectangulo A (x y w h): ";
-            for (int i = 0; i < 4; i++) cin >> A[i];
-
-            cout << "Rectangulo B (x y w h): ";
-            for (int i = 0; i < 4; i++) cin >> B[i];
-
-            interseccionRect(A, B, C);
-
-            cout << "Interseccion: ";
-            for (int i = 0; i < 4; i++) cout << C[i] << " ";
-            cout << endl;
-            break;
-        }
-
-        case 17: {
-            int n;
-            cout << "Ingrese numero: ";
-            cin >> n;
-
-            cout << "Suma amigables: " << sumaAmigables(n) << endl;
-            break;
-        }
-
-        case 0:
-            cout << "Saliendo...\n";
-            break;
-
-        default:
-            cout << "Opcion invalida\n";
-        }
-
-    } while (op != 0);
-
+    } catch (const exception& e) {
+        cerr << "\nError critico: " << e.what() << endl;
+        return 1;
+    }
     return 0;
 }
